@@ -8,4 +8,4 @@ beautifulsoup4
 requests
 lxml
 streamlit-aggrid
-seab
+
