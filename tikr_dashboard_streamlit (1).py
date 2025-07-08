@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
+import seab as sns
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings("ignore")
 
 from real_time_financial_dashboard import RealTimeFinancialDashboard
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 # Initialize the dashboard class
 dashboard = RealTimeFinancialDashboard()
@@ -48,32 +49,24 @@ if run_dashboard:
         st.subheader("📊 Key Ratios")
         df_ratios = pd.DataFrame(data['financials']['ratios'])
         df_ratios.set_index('years', inplace=True)
+        df_ratios_t = df_ratios.transpose().reset_index()
 
-        # Use AG-Grid to enable row click interaction
-        from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-
-        gb = GridOptionsBuilder.from_dataframe(df_ratios.reset_index())
+        gb = GridOptionsBuilder.from_dataframe(df_ratios_t)
         gb.configure_selection('single')
-        grid_options = gb.build()
-
         grid_response = AgGrid(
-            df_ratios.reset_index(),
-            gridOptions=grid_options,
-            update_mode=GridUpdateMode.MODEL_CHANGED,
-            enable_enterprise_modules=False,
-            theme='streamlit',
-            fit_columns_on_grid_load=True
+            df_ratios_t,
+            gridOptions=gb.build(),
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
+            theme='streamlit'
         )
 
-        selected_rows = grid_response['selected_rows']
-
-        if selected_rows:
-            selected_year = selected_rows[0]['years']
-            fig, ax = plt.subplots(figsize=(12, 4))
-            df_ratios.loc[selected_year].plot(kind='bar', ax=ax)
-            ax.set_title(f"Key Ratios - {selected_year}")
-            ax.set_ylabel("Ratio Value")
-            ax.grid(True)
+        if grid_response['selected_rows']:
+            row = grid_response['selected_rows'][0]
+            metric = row['index']
+            st.subheader(f"📉 Chart: {metric} over Years")
+            fig, ax = plt.subplots(figsize=(10, 4))
+            df_ratios_t[df_ratios_t['index'] == metric].iloc[0, 1:].plot(kind='bar', ax=ax)
+            ax.set_ylabel("Value")
             st.pyplot(fig)
 
     # --- Tab 2: Income Statement ---
@@ -81,14 +74,50 @@ if run_dashboard:
         st.subheader("💰 Income Statement")
         df_income = pd.DataFrame(data['financials']['income_statement'])
         df_income.set_index('years', inplace=True)
-        st.dataframe(df_income.transpose().style.format("{:.2f}"))
+        df_income_t = df_income.transpose().reset_index()
+
+        gb2 = GridOptionsBuilder.from_dataframe(df_income_t)
+        gb2.configure_selection('single')
+        grid_response2 = AgGrid(
+            df_income_t,
+            gridOptions=gb2.build(),
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
+            theme='streamlit'
+        )
+
+        if grid_response2['selected_rows']:
+            row = grid_response2['selected_rows'][0]
+            metric = row['index']
+            st.subheader(f"📉 Chart: {metric} over Years")
+            fig, ax = plt.subplots(figsize=(10, 4))
+            df_income_t[df_income_t['index'] == metric].iloc[0, 1:].plot(kind='bar', ax=ax)
+            ax.set_ylabel("₹ in Cr")
+            st.pyplot(fig)
 
     # --- Tab 3: Balance Sheet ---
     with tab3:
         st.subheader("📘 Balance Sheet")
         df_bs = pd.DataFrame(data['financials']['balance_sheet'])
         df_bs.set_index('years', inplace=True)
-        st.dataframe(df_bs.transpose().style.format("{:.2f}"))
+        df_bs_t = df_bs.transpose().reset_index()
+
+        gb3 = GridOptionsBuilder.from_dataframe(df_bs_t)
+        gb3.configure_selection('single')
+        grid_response3 = AgGrid(
+            df_bs_t,
+            gridOptions=gb3.build(),
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
+            theme='streamlit'
+        )
+
+        if grid_response3['selected_rows']:
+            row = grid_response3['selected_rows'][0]
+            metric = row['index']
+            st.subheader(f"📉 Chart: {metric} over Years")
+            fig, ax = plt.subplots(figsize=(10, 4))
+            df_bs_t[df_bs_t['index'] == metric].iloc[0, 1:].plot(kind='bar', ax=ax)
+            ax.set_ylabel("₹ in Cr")
+            st.pyplot(fig)
 
     # --- Tab 4: Cash Flow ---
     with tab4:
