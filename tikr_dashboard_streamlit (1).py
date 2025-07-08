@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore")
 from real_time_financial_dashboard import RealTimeFinancialDashboard
 
 # Initialize the dashboard class
-dashboard = RealTimeFinancialDashboard()
+dashboard = RealTimeFinancialDashboard(strict=True)
 
 # Streamlit UI setup
 st.set_page_config(page_title="TIKR-Style Financial Dashboard", layout="wide")
@@ -48,7 +48,16 @@ if run_dashboard:
         st.subheader("📊 Key Ratios")
         df_ratios = pd.DataFrame(data['financials']['ratios'])
         df_ratios.set_index('years', inplace=True)
+        selected_year = st.selectbox("Click a year to plot its metrics:", df_ratios.index[::-1])
         st.dataframe(df_ratios.style.format("{:.2f}"))
+
+        if selected_year:
+            fig, ax = plt.subplots(figsize=(12, 4))
+            df_ratios.loc[selected_year].plot(kind='bar', ax=ax)
+            ax.set_title(f"Key Ratios - {selected_year}")
+            ax.set_ylabel("Ratio Value")
+            ax.grid(True)
+            st.pyplot(fig)
 
     # --- Tab 2: Income Statement ---
     with tab2:
