@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore")
 from real_time_financial_dashboard import RealTimeFinancialDashboard
 
 # Initialize the dashboard class
-dashboard = RealTimeFinancialDashboard()
+dashboard = RealTimeFinancialDashboard(strict=True)
 
 # Streamlit UI setup
 st.set_page_config(page_title="TIKR-Style Financial Dashboard", layout="wide")
@@ -25,8 +25,8 @@ if run_dashboard:
     with st.spinner(f"Fetching and processing data for {symbol_input}..."):
         try:
             data = dashboard.get_screener_data(symbol_input.upper())
-            if not data:
-                raise ValueError("Empty data received.")
+            if not data or "financials" not in data:
+                raise ValueError("Empty or invalid data received from live source.")
         except Exception as e:
             st.error(f"❌ Error while fetching data for {symbol_input.upper()}: {str(e)}")
             st.stop()
