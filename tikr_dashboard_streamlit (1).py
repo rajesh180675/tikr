@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings("ignore")
 
-from real_time_financial_dashboard import RealTimeFinancialDashboard
+from real_time import RealTimeFinancialDashboard
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 # Initialize the dashboard class
