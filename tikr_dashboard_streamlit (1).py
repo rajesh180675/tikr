@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore")
 from real_time_financial_dashboard import RealTimeFinancialDashboard
 
 # Initialize the dashboard class
-dashboard = RealTimeFinancialDashboard(strict=True)
+dashboard = RealTimeFinancialDashboard()
 
 # Streamlit UI setup
 st.set_page_config(page_title="TIKR-Style Financial Dashboard", layout="wide")
