@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seab as sns
+import seaborn as sns
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings("ignore")
