@@ -48,10 +48,27 @@ if run_dashboard:
         st.subheader("📊 Key Ratios")
         df_ratios = pd.DataFrame(data['financials']['ratios'])
         df_ratios.set_index('years', inplace=True)
-        selected_year = st.selectbox("Click a year to plot its metrics:", df_ratios.index[::-1])
-        st.dataframe(df_ratios.style.format("{:.2f}"))
 
-        if selected_year:
+        # Use AG-Grid to enable row click interaction
+        from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+
+        gb = GridOptionsBuilder.from_dataframe(df_ratios.reset_index())
+        gb.configure_selection('single')
+        grid_options = gb.build()
+
+        grid_response = AgGrid(
+            df_ratios.reset_index(),
+            gridOptions=grid_options,
+            update_mode=GridUpdateMode.MODEL_CHANGED,
+            enable_enterprise_modules=False,
+            theme='streamlit',
+            fit_columns_on_grid_load=True
+        )
+
+        selected_rows = grid_response['selected_rows']
+
+        if selected_rows:
+            selected_year = selected_rows[0]['years']
             fig, ax = plt.subplots(figsize=(12, 4))
             df_ratios.loc[selected_year].plot(kind='bar', ax=ax)
             ax.set_title(f"Key Ratios - {selected_year}")
