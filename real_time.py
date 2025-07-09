@@ -1,17 +1,11 @@
+# real_time.py
+
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Optional, Dict, Any
-
-# --- Best Practice: Use constants for dictionary keys to avoid typos ---
-KEY_YEARS = 'years'
-KEY_FINANCIALS = 'financials'
-KEY_INCOME = 'income_statement'
-KEY_BALANCE = 'balance_sheet'
-KEY_CASH_FLOW = 'cash_flow'
-KEY_RATIOS = 'ratios'
 
 class RealTimeFinancialDashboard:
     """
@@ -34,9 +28,7 @@ class RealTimeFinancialDashboard:
     def _safe_division(self, numerator: pd.Series, denominator: pd.Series) -> pd.Series:
         """
         Performs division safely, returning np.nan where the denominator is zero.
-        This prevents 'inf' values or ZeroDivisionError.
         """
-        # Replace 0 in the denominator with NaN to avoid errors
         denominator_safe = denominator.replace(0, np.nan)
         return numerator / denominator_safe
 
@@ -51,72 +43,60 @@ class RealTimeFinancialDashboard:
             A dictionary containing structured financial data, or None if the symbol is invalid
             or data is unavailable.
         """
-        if not symbol.upper().endswith('.NS'):
-            symbol += '.NS'
+        stock_symbol = symbol.upper()
+        if not stock_symbol.endswith('.NS'):
+            stock_symbol += '.NS'
 
-        stock = yf.Ticker(symbol)
-        
-        # --- Improvement 1: Robust check for invalid tickers ---
-        # yf.Ticker doesn't fail on invalid symbols, but .info will be empty.
+        stock = yf.Ticker(stock_symbol)
         info = stock.info
-        if not info or 'regularMarketPrice' not in info and 'currentPrice' not in info:
-            print(f"Error: Could not fetch data for symbol '{symbol}'. It may be an invalid ticker.")
+        
+        if not info or ('regularMarketPrice' not in info and 'currentPrice' not in info):
             return None
 
-        # --- Financial Statements (Annual) ---
-        # Fetch first, then check for emptiness
         try:
             income_statement = stock.financials.transpose().reset_index()
             balance_sheet = stock.balance_sheet.transpose().reset_index()
             cash_flow = stock.cashflow.transpose().reset_index()
             if income_statement.empty or balance_sheet.empty:
-                print(f"Warning: Financial statements are empty for {symbol}.")
-                return None # Essential data is missing
-        except Exception as e:
-            print(f"Could not retrieve financial statements for {symbol}: {e}")
+                return None
+        except Exception:
             return None
             
-        # Rename columns and format dates
         for df in [income_statement, balance_sheet, cash_flow]:
-            df.rename(columns={'index': KEY_YEARS}, inplace=True)
-            if KEY_YEARS in df.columns:
-                df[KEY_YEARS] = pd.to_datetime(df[KEY_YEARS]).dt.strftime('%Y')
+            df.rename(columns={'index': 'years'}, inplace=True)
+            if 'years' in df.columns:
+                df['years'] = pd.to_datetime(df['years']).dt.strftime('%Y')
 
-        # --- Key Ratios Calculation ---
-        ratios = pd.DataFrame()
-        ratios[KEY_YEARS] = income_statement[KEY_YEARS]
-
-        # Use the safe division helper function for robustness
+        ratios = pd.DataFrame({'years': income_statement['years']})
         ratios['Net Profit Margin'] = self._safe_division(income_statement.get('Net Income', 0), income_statement.get('Total Revenue', 0))
         ratios['Return on Equity (ROE)'] = self._safe_division(income_statement.get('Net Income', 0), balance_sheet.get('Total Stockholder Equity', 0))
         ratios['Return on Assets (ROA)'] = self._safe_division(income_statement.get('Net Income', 0), balance_sheet.get('Total Assets', 0))
         ratios['Current Ratio'] = self._safe_division(balance_sheet.get('Total Current Assets', 0), balance_sheet.get('Total Current Liabilities', 0))
         ratios['Debt to Equity'] = self._safe_division(balance_sheet.get('Total Liab', 0), balance_sheet.get('Total Stockholder Equity', 0))
         
-        # Fill NaN values with 0 after calculations are done
         for df in [ratios, income_statement, balance_sheet, cash_flow]:
             df.fillna(0, inplace=True)
         
-        # --- Assemble Data Dictionary ---
-        # Use .get() with default values for safety
         ebitda = info.get('ebitda', 0)
         enterprise_value = info.get('enterpriseValue', 0)
+        current_price = info.get('currentPrice', info.get('regularMarketPrice', 0))
+        prev_close = info.get('previousClose', current_price) # Fallback to current price if no prev_close
 
         data = {
-            "symbol": symbol,
+            "symbol": stock_symbol,
             "company_name": info.get('longName', 'N/A'),
-            "current_price": info.get('currentPrice', info.get('regularMarketPrice', 0)),
-            "change": info.get('currentPrice', 0) - info.get('previousClose', 0),
-            "change_percent": (info.get('currentPrice', 0) / info.get('previousClose', 1) - 1) * 100,
+            "current_price": current_price,
+            "change": current_price - prev_close,
+            "change_percent": ((current_price / prev_close) - 1) * 100 if prev_close else 0,
             "market_cap": info.get('marketCap', 0),
             "book_value": info.get('bookValue', 0),
             "dividend_yield": info.get('dividendYield', 0),
             "pe_ratio": info.get('trailingPE', 0),
-            KEY_FINANCIALS: {
-                KEY_RATIOS: ratios.to_dict('records'),
-                KEY_INCOME: income_statement.to_dict('records'),
-                KEY_BALANCE: balance_sheet.to_dict('records'),
-                KEY_CASH_FLOW: cash_flow.to_dict('records'),
+            "financials": {
+                "ratios": ratios.to_dict('records'),
+                "income_statement": income_statement.to_dict('records'),
+                "balance_sheet": balance_sheet.to_dict('records'),
+                "cash_flow": cash_flow.to_dict('records'),
             },
             "real_time_metrics": {
                 "return_on_equity": info.get('returnOnEquity', 0),
@@ -133,6 +113,7 @@ class RealTimeFinancialDashboard:
     def create_comprehensive_dashboard(self, symbol: str) -> Optional[plt.Figure]:
         """
         Creates a 2x2 dashboard of key financial charts for a given symbol.
+        This method is now self-contained and fetches its own data.
 
         Args:
             symbol: The NSE stock symbol (e.g., "ITC").
@@ -140,19 +121,19 @@ class RealTimeFinancialDashboard:
         Returns:
             A matplotlib Figure object containing the charts, or None if data cannot be fetched.
         """
-        # --- Improvement 2: Better Encapsulation ---
-        # This method is now self-contained. It fetches its own data.
         data = self.get_screener_data(symbol)
         if not data:
-            return None # Return nothing if data fetching failed
+            return None 
 
         CRORE = 1_00_00_000 
         
-        # Load dataframes from the fetched data
-        df_income = pd.DataFrame(data[KEY_FINANCIALS][KEY_INCOME]).set_index(KEY_YEARS)
-        df_bs = pd.DataFrame(data[KEY_FINANCIALS][KEY_BALANCE]).set_index(KEY_YEARS)
-        df_cf = pd.DataFrame(data[KEY_FINANCIALS][KEY_CASH_FLOW]).set_index(KEY_YEARS)
-        df_ratios = pd.DataFrame(data[KEY_FINANCIALS][KEY_RATIOS]).set_index(KEY_YEARS)
+        try:
+            df_income = pd.DataFrame(data['financials']['income_statement']).set_index('years')
+            df_bs = pd.DataFrame(data['financials']['balance_sheet']).set_index('years')
+            df_cf = pd.DataFrame(data['financials']['cash_flow']).set_index('years')
+            df_ratios = pd.DataFrame(data['financials']['ratios']).set_index('years')
+        except KeyError:
+            return None
 
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
         fig.suptitle(f'Financial Health of {data["company_name"]}', fontsize=20, y=1.02)
@@ -174,7 +155,8 @@ class RealTimeFinancialDashboard:
 
         # 3. Cash Flow from Operations
         op_cash_flow = df_cf['Total Cash From Operating Activities'] / CRORE
-        axes[1, 0].bar(op_cash_flow.index, op_cash_flow, label='Operating Cash Flow (Cr)', color=np.where(op_cash_flow < 0, 'salmon', 'seagreen'))
+        colors = np.where(op_cash_flow < 0, 'salmon', 'seagreen')
+        axes[1, 0].bar(op_cash_flow.index, op_cash_flow, label='Operating Cash Flow (Cr)', color=colors)
         axes[1, 0].set_title("Operating Cash Flow")
         axes[1, 0].set_ylabel("Amount (in Cr)")
         axes[1, 0].axhline(0, color='black', linewidth=0.8, linestyle='--')
@@ -190,19 +172,3 @@ class RealTimeFinancialDashboard:
 
         plt.tight_layout(rect=[0, 0, 1, 0.98])
         return fig
-
-# Your excellent __main__ block, now updated to reflect the refactoring
-if __name__ == '__main__':
-    dashboard = RealTimeFinancialDashboard()
-    stock_symbol = "RELIANCE"  # .NS is added automatically
-
-    print(f"Fetching data for {stock_symbol}...")
-    
-    # --- Improvement 3: The plotting function is now self-sufficient ---
-    fig = dashboard.create_comprehensive_dashboard(stock_symbol)
-    
-    if fig:
-        print("Chart generated successfully. Displaying plot...")
-        plt.show()
-    else:
-        print(f"\nCould not generate dashboard for {stock_symbol}. Please check the symbol and try again.")
