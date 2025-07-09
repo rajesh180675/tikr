@@ -17,32 +17,17 @@ class RealTimeFinancialDashboard:
         """Initializes the dashboard class and sets a professional plot style."""
         sns.set_style("whitegrid")
         plt.rcParams.update({
-            'figure.figsize': (12, 6),
-            'axes.titlesize': 16,
-            'axes.labelsize': 12,
-            'xtick.labelsize': 10,
-            'ytick.labelsize': 10,
-            'legend.fontsize': 10
+            'figure.figsize': (12, 6), 'axes.titlesize': 16, 'axes.labelsize': 12,
+            'xtick.labelsize': 10, 'ytick.labelsize': 10, 'legend.fontsize': 10
         })
 
     def _safe_division(self, numerator: pd.Series, denominator: pd.Series) -> pd.Series:
-        """
-        Performs division safely, returning np.nan where the denominator is zero.
-        """
+        """Performs division safely, returning np.nan where the denominator is zero."""
         denominator_safe = denominator.replace(0, np.nan)
         return numerator / denominator_safe
 
     def get_screener_data(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """
-        Fetches comprehensive financial data for a given NSE stock symbol.
-
-        Args:
-            symbol: The NSE stock symbol (e.g., "ITC"). The ".NS" suffix is added automatically.
-
-        Returns:
-            A dictionary containing structured financial data, or None if the symbol is invalid
-            or data is unavailable.
-        """
+        """Fetches comprehensive financial data for a given NSE stock symbol."""
         stock_symbol = symbol.upper()
         if not stock_symbol.endswith('.NS'):
             stock_symbol += '.NS'
@@ -80,32 +65,23 @@ class RealTimeFinancialDashboard:
         ebitda = info.get('ebitda', 0)
         enterprise_value = info.get('enterpriseValue', 0)
         current_price = info.get('currentPrice', info.get('regularMarketPrice', 0))
-        prev_close = info.get('previousClose', current_price) # Fallback to current price if no prev_close
+        prev_close = info.get('previousClose', current_price)
 
         data = {
-            "symbol": stock_symbol,
-            "company_name": info.get('longName', 'N/A'),
-            "current_price": current_price,
-            "change": current_price - prev_close,
+            "symbol": stock_symbol, "company_name": info.get('longName', 'N/A'),
+            "current_price": current_price, "change": current_price - prev_close,
             "change_percent": ((current_price / prev_close) - 1) * 100 if prev_close else 0,
-            "market_cap": info.get('marketCap', 0),
-            "book_value": info.get('bookValue', 0),
-            "dividend_yield": info.get('dividendYield', 0),
-            "pe_ratio": info.get('trailingPE', 0),
+            "market_cap": info.get('marketCap', 0), "book_value": info.get('bookValue', 0),
+            "dividend_yield": info.get('dividendYield', 0), "pe_ratio": info.get('trailingPE', 0),
             "financials": {
-                "ratios": ratios.to_dict('records'),
-                "income_statement": income_statement.to_dict('records'),
-                "balance_sheet": balance_sheet.to_dict('records'),
-                "cash_flow": cash_flow.to_dict('records'),
+                "ratios": ratios.to_dict('records'), "income_statement": income_statement.to_dict('records'),
+                "balance_sheet": balance_sheet.to_dict('records'), "cash_flow": cash_flow.to_dict('records'),
             },
             "real_time_metrics": {
-                "return_on_equity": info.get('returnOnEquity', 0),
-                "debt_to_equity": info.get('debtToEquity', 0),
-                "free_cashflow": info.get('freeCashflow', 0),
-                "enterprise_value": enterprise_value,
+                "return_on_equity": info.get('returnOnEquity', 0), "debt_to_equity": info.get('debtToEquity', 0),
+                "free_cashflow": info.get('freeCashflow', 0), "enterprise_value": enterprise_value,
                 "ev_to_ebitda": enterprise_value / ebitda if ebitda else 0,
-                "fifty_two_week_high": info.get('fiftyTwoWeekHigh', 0),
-                "fifty_two_week_low": info.get('fiftyTwoWeekLow', 0),
+                "fifty_two_week_high": info.get('fiftyTwoWeekHigh', 0), "fifty_two_week_low": info.get('fiftyTwoWeekLow', 0),
             }
         }
         return data
@@ -113,14 +89,9 @@ class RealTimeFinancialDashboard:
     def create_comprehensive_dashboard(self, symbol: str) -> Optional[plt.Figure]:
         """
         Creates a 2x2 dashboard of key financial charts for a given symbol.
-        This method is now self-contained and fetches its own data.
-
-        Args:
-            symbol: The NSE stock symbol (e.g., "ITC").
-
-        Returns:
-            A matplotlib Figure object containing the charts, or None if data cannot be fetched.
+        This method is self-contained: it fetches its own data.
         """
+        # **THIS IS THE CRITICAL FIX**: This function now calls get_screener_data internally.
         data = self.get_screener_data(symbol)
         if not data:
             return None 
@@ -132,7 +103,7 @@ class RealTimeFinancialDashboard:
             df_bs = pd.DataFrame(data['financials']['balance_sheet']).set_index('years')
             df_cf = pd.DataFrame(data['financials']['cash_flow']).set_index('years')
             df_ratios = pd.DataFrame(data['financials']['ratios']).set_index('years')
-        except KeyError:
+        except (KeyError, TypeError):
             return None
 
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
@@ -141,19 +112,16 @@ class RealTimeFinancialDashboard:
         for df in [df_income, df_bs, df_cf, df_ratios]:
             df.sort_index(inplace=True)
 
-        # 1. Revenue and Net Income
         axes[0, 0].bar(df_income.index, df_income['Total Revenue'] / CRORE, label='Total Revenue (Cr)', color='skyblue')
         axes[0, 0].plot(df_income.index, df_income['Net Income'] / CRORE, label='Net Income (Cr)', marker='o', color='crimson', linewidth=2.5)
         axes[0, 0].set_title("Revenue & Net Income Trend")
         axes[0, 0].set_ylabel("Amount (in Cr)")
 
-        # 2. Assets vs. Liabilities
         axes[0, 1].plot(df_bs.index, df_bs['Total Assets'] / CRORE, label='Total Assets (Cr)', marker='o', linestyle='-', color='darkgreen')
         axes[0, 1].plot(df_bs.index, df_bs['Total Liab'] / CRORE, label='Total Liabilities (Cr)', marker='^', linestyle='--', color='orangered')
         axes[0, 1].set_title("Assets vs. Liabilities")
         axes[0, 1].set_ylabel("Amount (in Cr)")
 
-        # 3. Cash Flow from Operations
         op_cash_flow = df_cf['Total Cash From Operating Activities'] / CRORE
         colors = np.where(op_cash_flow < 0, 'salmon', 'seagreen')
         axes[1, 0].bar(op_cash_flow.index, op_cash_flow, label='Operating Cash Flow (Cr)', color=colors)
@@ -161,7 +129,6 @@ class RealTimeFinancialDashboard:
         axes[1, 0].set_ylabel("Amount (in Cr)")
         axes[1, 0].axhline(0, color='black', linewidth=0.8, linestyle='--')
 
-        # 4. Debt to Equity Ratio
         axes[1, 1].plot(df_ratios.index, df_ratios['Debt to Equity'], label='Debt-to-Equity Ratio', marker='s', color='purple')
         axes[1, 1].set_title("Debt-to-Equity Ratio")
         axes[1, 1].set_ylabel("Ratio")
