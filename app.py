@@ -30,11 +30,11 @@ def create_interactive_financial_grid(df_transposed: pd.DataFrame, title: str, i
         df_transposed, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED,
         theme='streamlit', allow_unsafe_jscode=True, height=450, fit_columns_on_grid_load=True
     )
-
-    # **THIS IS THE FIX for the ValueError**: Check if the returned DataFrame is empty.
+    
     selected_rows_df = grid_response['selected_rows']
-    if not selected_rows_df.empty:
-        # Convert the first (and only) selected row to a dictionary
+    
+    # **THIS IS THE FIX for the 'NoneType' and 'ValueError'**: Check if the returned object is a non-empty DataFrame.
+    if isinstance(selected_rows_df, pd.DataFrame) and not selected_rows_df.empty:
         selected_row_data = selected_rows_df.to_dict('records')[0]
         
         metric = selected_row_data.pop('Metric')
@@ -72,7 +72,7 @@ col1, col2 = st.sidebar.columns(2)
 run_dashboard = col1.button("Generate", use_container_width=True, type="primary")
 if col2.button("Clear", use_container_width=True):
     st.session_state.data = None
-    st.rerun() # Use the stable st.rerun()
+    st.rerun()
 
 if run_dashboard and symbol_input:
     with st.spinner(f"Fetching and processing data for {symbol_input.upper()}..."):
@@ -85,7 +85,6 @@ if run_dashboard and symbol_input:
 
 if 'data' in st.session_state and st.session_state.data:
     data = st.session_state.data
-
     st.markdown(f"## {data['company_name']} ({data['symbol']})")
     price_delta_color = "normal" if data.get('change', 0) >= 0 else "inverse"
     metrics = data['real_time_metrics']
