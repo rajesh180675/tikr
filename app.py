@@ -5,7 +5,7 @@ import warnings
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 
 # Import the custom dashboard class
-from real_time_financial_dashboard import RealTimeFinancialDashboard
+from real_time import RealTimeFinancialDashboard
 
 warnings.filterwarnings("ignore")
 
