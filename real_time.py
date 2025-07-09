@@ -87,11 +87,7 @@ class RealTimeFinancialDashboard:
         return data
 
     def create_comprehensive_dashboard(self, symbol: str) -> Optional[plt.Figure]:
-        """
-        Creates a 2x2 dashboard of key financial charts for a given symbol.
-        This method is self-contained: it fetches its own data.
-        """
-        # **THIS IS THE CRITICAL FIX**: This function now calls get_screener_data internally.
+        """Creates a 2x2 dashboard of key financial charts for a given symbol."""
         data = self.get_screener_data(symbol)
         if not data:
             return None 
