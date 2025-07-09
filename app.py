@@ -31,8 +31,12 @@ def create_interactive_financial_grid(df_transposed: pd.DataFrame, title: str, i
         theme='streamlit', allow_unsafe_jscode=True, height=450, fit_columns_on_grid_load=True
     )
 
-    if grid_response['selected_rows']:
-        selected_row_data = grid_response['selected_rows'][0]
+    # **THIS IS THE FIX for the ValueError**: Check if the returned DataFrame is empty.
+    selected_rows_df = grid_response['selected_rows']
+    if not selected_rows_df.empty:
+        # Convert the first (and only) selected row to a dictionary
+        selected_row_data = selected_rows_df.to_dict('records')[0]
+        
         metric = selected_row_data.pop('Metric')
         plot_data = pd.Series(selected_row_data).astype(float).sort_index()
 
@@ -68,8 +72,7 @@ col1, col2 = st.sidebar.columns(2)
 run_dashboard = col1.button("Generate", use_container_width=True, type="primary")
 if col2.button("Clear", use_container_width=True):
     st.session_state.data = None
-    # **THIS IS THE FIX for the AttributeError**: Use st.rerun()
-    st.rerun()
+    st.rerun() # Use the stable st.rerun()
 
 if run_dashboard and symbol_input:
     with st.spinner(f"Fetching and processing data for {symbol_input.upper()}..."):
@@ -124,7 +127,6 @@ if 'data' in st.session_state and st.session_state.data:
         else: st.warning("Cash flow data is not available.")
     with tab5:
         st.subheader("📈 Financial Summary Charts")
-        # **THIS IS THE FIX for the TypeError**: Pass the symbol string, not the whole data dict.
         fig = st.session_state.dashboard.create_comprehensive_dashboard(data['symbol'])
         if fig: st.pyplot(fig)
         else: st.warning("Could not generate comprehensive charts due to missing data.")
