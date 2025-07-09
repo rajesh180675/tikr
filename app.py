@@ -33,9 +33,34 @@ def create_interactive_financial_grid(df_transposed: pd.DataFrame, title: str, i
     
     selected_rows_df = grid_response['selected_rows']
     
-    # **THIS IS THE FIX for the 'NoneType' and 'ValueError'**: Check if the returned object is a non-empty DataFrame.
+    # Check if the returned object is a non-empty DataFrame or list
     if isinstance(selected_rows_df, pd.DataFrame) and not selected_rows_df.empty:
         selected_row_data = selected_rows_df.to_dict('records')[0]
+        
+        metric = selected_row_data.pop('Metric')
+        plot_data = pd.Series(selected_row_data).astype(float).sort_index()
+
+        st.subheader(f"📈 Chart: {metric} over Years")
+        fig, ax = plt.subplots(figsize=(12, 5))
+        
+        colors = ['#2ca02c' if val >= 0 else '#d62728' for val in plot_data]
+        plot_data.plot(kind='bar', ax=ax, color=colors, edgecolor='black', alpha=0.8)
+        
+        ax.set_ylabel("Value" if is_ratio else "Amount (in Cr)")
+        ax.set_xlabel("Year")
+        ax.tick_params(axis='x', rotation=45, labelsize=12)
+        ax.grid(axis='y', linestyle='--', alpha=0.6)
+        
+        for p in ax.patches:
+            ax.annotate(f'{p.get_height():,.2f}', (p.get_x() + p.get_width() / 2., p.get_height()),
+                        ha='center', va='center', fontsize=9, color='black', xytext=(0, 10),
+                        textcoords='offset points')
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+    elif isinstance(selected_rows_df, list) and selected_rows_df:
+        # Handle case where selected_rows is a list
+        selected_row_data = selected_rows_df[0]
         
         metric = selected_row_data.pop('Metric')
         plot_data = pd.Series(selected_row_data).astype(float).sort_index()
@@ -76,12 +101,16 @@ if col2.button("Clear", use_container_width=True):
 
 if run_dashboard and symbol_input:
     with st.spinner(f"Fetching and processing data for {symbol_input.upper()}..."):
-        data = st.session_state.dashboard.get_screener_data(symbol_input.upper())
-        if not data:
-            st.error(f"❌ Error for {symbol_input.upper()}: No data received. The symbol may be incorrect, delisted, or lack financial data on Yahoo Finance.")
+        try:
+            data = st.session_state.dashboard.get_screener_data(symbol_input.upper())
+            if not data:
+                st.error(f"❌ Error for {symbol_input.upper()}: No data received. The symbol may be incorrect, delisted, or lack financial data on Yahoo Finance.")
+                st.session_state.data = None
+            else:
+                st.session_state.data = data
+        except Exception as e:
+            st.error(f"❌ Error processing {symbol_input.upper()}: {str(e)}")
             st.session_state.data = None
-        else:
-            st.session_state.data = data
 
 if 'data' in st.session_state and st.session_state.data:
     data = st.session_state.data
@@ -113,22 +142,40 @@ if 'data' in st.session_state and st.session_state.data:
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Key Ratios", "💰 Income Statement", "📘 Balance Sheet", "💵 Cash Flow", "📈 Charts", "🧾 Summary"])
 
     with tab1:
-        if df_ratios_t is not None: create_interactive_financial_grid(df_ratios_t, "Key Financial Ratios", is_ratio=True)
-        else: st.warning("Key ratio data is not available.")
+        if df_ratios_t is not None: 
+            create_interactive_financial_grid(df_ratios_t, "Key Financial Ratios", is_ratio=True)
+        else: 
+            st.warning("Key ratio data is not available.")
+    
     with tab2:
-        if df_income_t is not None: create_interactive_financial_grid(df_income_t, "Annual Income Statement")
-        else: st.warning("Income statement data is not available.")
+        if df_income_t is not None: 
+            create_interactive_financial_grid(df_income_t, "Annual Income Statement")
+        else: 
+            st.warning("Income statement data is not available.")
+    
     with tab3:
-        if df_bs_t is not None: create_interactive_financial_grid(df_bs_t, "Annual Balance Sheet")
-        else: st.warning("Balance sheet data is not available.")
+        if df_bs_t is not None: 
+            create_interactive_financial_grid(df_bs_t, "Annual Balance Sheet")
+        else: 
+            st.warning("Balance sheet data is not available.")
+    
     with tab4:
-        if df_cf_t is not None: create_interactive_financial_grid(df_cf_t, "Annual Cash Flow Statement")
-        else: st.warning("Cash flow data is not available.")
+        if df_cf_t is not None: 
+            create_interactive_financial_grid(df_cf_t, "Annual Cash Flow Statement")
+        else: 
+            st.warning("Cash flow data is not available.")
+    
     with tab5:
         st.subheader("📈 Financial Summary Charts")
-        fig = st.session_state.dashboard.create_comprehensive_dashboard(data['symbol'])
-        if fig: st.pyplot(fig)
-        else: st.warning("Could not generate comprehensive charts due to missing data.")
+        try:
+            fig = st.session_state.dashboard.create_comprehensive_dashboard(data['symbol'])
+            if fig: 
+                st.pyplot(fig)
+            else: 
+                st.warning("Could not generate comprehensive charts due to missing data.")
+        except Exception as e:
+            st.warning(f"Chart generation failed: {str(e)}")
+    
     with tab6:
         st.subheader("🧾 Company Snapshot")
         col1, col2 = st.columns(2)
@@ -143,10 +190,13 @@ if 'data' in st.session_state and st.session_state.data:
         col4.metric("52-Week Low", f"₹{metrics.get('fifty_two_week_low', 0):.2f}")
     
     with st.expander("📥 Export Raw Data to CSV"):
-        def to_csv(df_dict): return pd.DataFrame(df_dict).to_csv(index=False).encode('utf-8')
+        def to_csv(df_dict): 
+            return pd.DataFrame(df_dict).to_csv(index=False).encode('utf-8')
+        
         st.download_button("Download Income Statement", to_csv(data['financials']['income_statement']), f"{data['symbol']}_Income.csv", "text/csv")
         st.download_button("Download Balance Sheet", to_csv(data['financials']['balance_sheet']), f"{data['symbol']}_BalanceSheet.csv", "text/csv")
         st.download_button("Download Cash Flow", to_csv(data['financials']['cash_flow']), f"{data['symbol']}_CashFlow.csv", "text/csv")
+        st.download_button("Download Ratios", to_csv(data['financials']['ratios']), f"{data['symbol']}_Ratios.csv", "text/csv")
 else:
     st.info("👋 Welcome! Enter a valid NSE stock symbol and click 'Generate' to begin.")
 
