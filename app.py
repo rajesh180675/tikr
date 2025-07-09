@@ -11,46 +11,30 @@ from real_time import RealTimeFinancialDashboard
 warnings.filterwarnings("ignore")
 
 def create_interactive_financial_grid(df_transposed: pd.DataFrame, title: str, is_ratio: bool = False):
-    """
-    Displays an interactive AgGrid table and a corresponding bar chart for a selected row.
-    """
+    """Displays an interactive AgGrid table and a corresponding bar chart for a selected row."""
     st.subheader(title)
 
     gb = GridOptionsBuilder.from_dataframe(df_transposed)
     gb.configure_selection('single', use_checkbox=True)
     
-    cell_style_jscode = JsCode("""
-    function(params) {
-        if (typeof params.value === 'number') {
-            return { 'textAlign': 'right', 'fontFamily': 'monospace' };
-        }
-    };
-    """)
+    cell_style_jscode = JsCode("function(params) { if (typeof params.value === 'number') { return { 'textAlign': 'right', 'fontFamily': 'monospace' }; } };")
     gb.configure_column("Metric", headerName="Metric", flex=2, minWidth=250)
     for col in df_transposed.columns[1:]:
         gb.configure_column(
             col, type=["numericColumn", "numberColumnFilter"],
             valueFormatter="params.value == null ? '' : params.value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})",
-            cellStyle=cell_style_jscode,
-            flex=1, minWidth=120
+            cellStyle=cell_style_jscode, flex=1, minWidth=120
         )
     
     grid_response = AgGrid(
-        df_transposed,
-        gridOptions=gb.build(),
-        update_mode=GridUpdateMode.SELECTION_CHANGED,
-        theme='streamlit',
-        allow_unsafe_jscode=True,
-        height=450,
-        fit_columns_on_grid_load=True
+        df_transposed, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED,
+        theme='streamlit', allow_unsafe_jscode=True, height=450, fit_columns_on_grid_load=True
     )
 
     if grid_response['selected_rows']:
         selected_row_data = grid_response['selected_rows'][0]
         metric = selected_row_data.pop('Metric')
-        
-        plot_data = pd.Series(selected_row_data).astype(float)
-        plot_data.sort_index(inplace=True)
+        plot_data = pd.Series(selected_row_data).astype(float).sort_index()
 
         st.subheader(f"📈 Chart: {metric} over Years")
         fig, ax = plt.subplots(figsize=(12, 5))
@@ -71,7 +55,6 @@ def create_interactive_financial_grid(df_transposed: pd.DataFrame, title: str, i
         plt.tight_layout()
         st.pyplot(fig)
 
-
 st.set_page_config(page_title="TIKR-Style Financial Dashboard", layout="wide", initial_sidebar_state="expanded")
 
 if 'dashboard' not in st.session_state:
@@ -82,10 +65,11 @@ st.title("📈 Real-Time Financial Dashboard (TIKR Style)")
 st.sidebar.header("Company Selector")
 symbol_input = st.sidebar.text_input("Enter NSE Symbol (e.g., ITC, HDFCBANK):", value="RELIANCE")
 col1, col2 = st.sidebar.columns(2)
-run_dashboard = col1.button("Generate Dashboard", use_container_width=True, type="primary")
+run_dashboard = col1.button("Generate", use_container_width=True, type="primary")
 if col2.button("Clear", use_container_width=True):
     st.session_state.data = None
-    st.experimental_rerun()
+    # **THIS IS THE FIX for the AttributeError**: Use st.rerun()
+    st.rerun()
 
 if run_dashboard and symbol_input:
     with st.spinner(f"Fetching and processing data for {symbol_input.upper()}..."):
@@ -116,8 +100,7 @@ if 'data' in st.session_state and st.session_state.data:
         if df.empty: return None
         df.set_index('years', inplace=True)
         df_t = df.transpose()
-        if in_crores:
-            df_t = df_t / 1e7
+        if in_crores: df_t = df_t / 1e7
         return df_t.reset_index().rename(columns={'index': 'Metric'})
 
     df_income_t = prepare_df(data['financials']['income_statement'])
@@ -141,6 +124,7 @@ if 'data' in st.session_state and st.session_state.data:
         else: st.warning("Cash flow data is not available.")
     with tab5:
         st.subheader("📈 Financial Summary Charts")
+        # **THIS IS THE FIX for the TypeError**: Pass the symbol string, not the whole data dict.
         fig = st.session_state.dashboard.create_comprehensive_dashboard(data['symbol'])
         if fig: st.pyplot(fig)
         else: st.warning("Could not generate comprehensive charts due to missing data.")
@@ -163,8 +147,8 @@ if 'data' in st.session_state and st.session_state.data:
         st.download_button("Download Balance Sheet", to_csv(data['financials']['balance_sheet']), f"{data['symbol']}_BalanceSheet.csv", "text/csv")
         st.download_button("Download Cash Flow", to_csv(data['financials']['cash_flow']), f"{data['symbol']}_CashFlow.csv", "text/csv")
 else:
-    st.info("👋 Welcome! Enter a valid NSE stock symbol in the sidebar and click 'Generate Dashboard' to begin.")
+    st.info("👋 Welcome! Enter a valid NSE stock symbol and click 'Generate' to begin.")
 
 st.sidebar.markdown("---")
-st.sidebar.info("Data from `yfinance`. Accuracy is subject to Yahoo Finance's terms.")
+st.sidebar.info("Data from `yfinance`. Subject to Yahoo Finance's terms.")
 st.sidebar.caption("Made with ❤️ using Streamlit")
