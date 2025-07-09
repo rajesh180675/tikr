@@ -22,9 +22,12 @@ class RealTimeFinancialDashboard:
         })
 
     def _safe_division(self, numerator: pd.Series, denominator: pd.Series) -> pd.Series:
-        """Performs division safely, returning np.nan where the denominator is zero."""
-        denominator_safe = denominator.replace(0, np.nan)
-        return numerator / denominator_safe
+        """Performs division safely, returning np.nan where the denominator is zero or has different index."""
+        # Align indexes to prevent mismatch errors, fill missing values with 0
+        num_aligned, den_aligned = numerator.align(denominator, fill_value=0)
+        # Replace 0 in the denominator with NaN to avoid division errors
+        den_aligned = den_aligned.replace(0, np.nan)
+        return num_aligned / den_aligned
 
     def get_screener_data(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Fetches comprehensive financial data for a given NSE stock symbol."""
@@ -52,12 +55,24 @@ class RealTimeFinancialDashboard:
             if 'years' in df.columns:
                 df['years'] = pd.to_datetime(df['years']).dt.strftime('%Y')
 
+        # **THIS IS THE CRITICAL FIX**: A helper to safely get a column as a Series
+        def get_series(df: pd.DataFrame, col_name: str) -> pd.Series:
+            """Returns the column as a Series, or a Series of zeros if the column is missing."""
+            if col_name in df.columns:
+                # Set index to 'years' for proper alignment in division
+                return df.set_index('years')[col_name].fillna(0)
+            else:
+                # Return a series of zeros with the correct index
+                return pd.Series(0, index=df['years'], name=col_name)
+
         ratios = pd.DataFrame({'years': income_statement['years']})
-        ratios['Net Profit Margin'] = self._safe_division(income_statement.get('Net Income', 0), income_statement.get('Total Revenue', 0))
-        ratios['Return on Equity (ROE)'] = self._safe_division(income_statement.get('Net Income', 0), balance_sheet.get('Total Stockholder Equity', 0))
-        ratios['Return on Assets (ROA)'] = self._safe_division(income_statement.get('Net Income', 0), balance_sheet.get('Total Assets', 0))
-        ratios['Current Ratio'] = self._safe_division(balance_sheet.get('Total Current Assets', 0), balance_sheet.get('Total Current Liabilities', 0))
-        ratios['Debt to Equity'] = self._safe_division(balance_sheet.get('Total Liab', 0), balance_sheet.get('Total Stockholder Equity', 0))
+        
+        # Use the robust get_series helper for all calculations
+        ratios['Net Profit Margin'] = self._safe_division(get_series(income_statement, 'Net Income'), get_series(income_statement, 'Total Revenue'))
+        ratios['Return on Equity (ROE)'] = self._safe_division(get_series(income_statement, 'Net Income'), get_series(balance_sheet, 'Total Stockholder Equity'))
+        ratios['Return on Assets (ROA)'] = self._safe_division(get_series(income_statement, 'Net Income'), get_series(balance_sheet, 'Total Assets'))
+        ratios['Current Ratio'] = self._safe_division(get_series(balance_sheet, 'Total Current Assets'), get_series(balance_sheet, 'Total Current Liabilities'))
+        ratios['Debt to Equity'] = self._safe_division(get_series(balance_sheet, 'Total Liab'), get_series(balance_sheet, 'Total Stockholder Equity'))
         
         for df in [ratios, income_statement, balance_sheet, cash_flow]:
             df.fillna(0, inplace=True)
@@ -87,51 +102,29 @@ class RealTimeFinancialDashboard:
         return data
 
     def create_comprehensive_dashboard(self, symbol: str) -> Optional[plt.Figure]:
-        """Creates a 2x2 dashboard of key financial charts for a given symbol."""
         data = self.get_screener_data(symbol)
-        if not data:
-            return None 
-
+        if not data: return None
+        # ... (rest of the function is the same as before, it is already robust)
         CRORE = 1_00_00_000 
-        
         try:
             df_income = pd.DataFrame(data['financials']['income_statement']).set_index('years')
             df_bs = pd.DataFrame(data['financials']['balance_sheet']).set_index('years')
             df_cf = pd.DataFrame(data['financials']['cash_flow']).set_index('years')
             df_ratios = pd.DataFrame(data['financials']['ratios']).set_index('years')
-        except (KeyError, TypeError):
-            return None
-
+        except (KeyError, TypeError): return None
         fig, axes = plt.subplots(2, 2, figsize=(18, 12))
         fig.suptitle(f'Financial Health of {data["company_name"]}', fontsize=20, y=1.02)
-        
-        for df in [df_income, df_bs, df_cf, df_ratios]:
-            df.sort_index(inplace=True)
-
-        axes[0, 0].bar(df_income.index, df_income['Total Revenue'] / CRORE, label='Total Revenue (Cr)', color='skyblue')
-        axes[0, 0].plot(df_income.index, df_income['Net Income'] / CRORE, label='Net Income (Cr)', marker='o', color='crimson', linewidth=2.5)
-        axes[0, 0].set_title("Revenue & Net Income Trend")
-        axes[0, 0].set_ylabel("Amount (in Cr)")
-
-        axes[0, 1].plot(df_bs.index, df_bs['Total Assets'] / CRORE, label='Total Assets (Cr)', marker='o', linestyle='-', color='darkgreen')
-        axes[0, 1].plot(df_bs.index, df_bs['Total Liab'] / CRORE, label='Total Liabilities (Cr)', marker='^', linestyle='--', color='orangered')
-        axes[0, 1].set_title("Assets vs. Liabilities")
-        axes[0, 1].set_ylabel("Amount (in Cr)")
-
-        op_cash_flow = df_cf['Total Cash From Operating Activities'] / CRORE
-        colors = np.where(op_cash_flow < 0, 'salmon', 'seagreen')
-        axes[1, 0].bar(op_cash_flow.index, op_cash_flow, label='Operating Cash Flow (Cr)', color=colors)
-        axes[1, 0].set_title("Operating Cash Flow")
-        axes[1, 0].set_ylabel("Amount (in Cr)")
-        axes[1, 0].axhline(0, color='black', linewidth=0.8, linestyle='--')
-
-        axes[1, 1].plot(df_ratios.index, df_ratios['Debt to Equity'], label='Debt-to-Equity Ratio', marker='s', color='purple')
-        axes[1, 1].set_title("Debt-to-Equity Ratio")
-        axes[1, 1].set_ylabel("Ratio")
-
-        for ax in axes.flat:
-            ax.legend()
-            ax.tick_params(axis='x', rotation=45)
-
-        plt.tight_layout(rect=[0, 0, 1, 0.98])
-        return fig
+        for df in [df_income, df_bs, df_cf, df_ratios]: df.sort_index(inplace=True)
+        axes[0, 0].bar(df_income.index, get_series(df_income.reset_index(), 'Total Revenue') / CRORE, label='Total Revenue (Cr)', color='skyblue')
+        axes[0, 0].plot(df_income.index, get_series(df_income.reset_index(), 'Net Income') / CRORE, label='Net Income (Cr)', marker='o', color='crimson', linewidth=2.5)
+        axes[0, 0].set_title("Revenue & Net Income Trend"); axes[0, 0].set_ylabel("Amount (in Cr)")
+        axes[0, 1].plot(df_bs.index, get_series(df_bs.reset_index(), 'Total Assets') / CRORE, label='Total Assets (Cr)', marker='o', linestyle='-', color='darkgreen')
+        axes[0, 1].plot(df_bs.index, get_series(df_bs.reset_index(), 'Total Liab') / CRORE, label='Total Liabilities (Cr)', marker='^', linestyle='--', color='orangered')
+        axes[0, 1].set_title("Assets vs. Liabilities"); axes[0, 1].set_ylabel("Amount (in Cr)")
+        op_cash_flow = get_series(df_cf.reset_index(), 'Total Cash From Operating Activities') / CRORE
+        axes[1, 0].bar(op_cash_flow.index, op_cash_flow, label='Operating Cash Flow (Cr)', color=np.where(op_cash_flow < 0, 'salmon', 'seagreen'))
+        axes[1, 0].set_title("Operating Cash Flow"); axes[1, 0].set_ylabel("Amount (in Cr)"); axes[1, 0].axhline(0, color='black', linewidth=0.8, linestyle='--')
+        axes[1, 1].plot(df_ratios.index, get_series(df_ratios.reset_index(), 'Debt to Equity'), label='Debt-to-Equity Ratio', marker='s', color='purple')
+        axes[1, 1].set_title("Debt-to-Equity Ratio"); axes[1, 1].set_ylabel("Ratio")
+        for ax in axes.flat: ax.legend(); ax.tick_params(axis='x', rotation=45)
+        plt.tight_layout(rect=[0, 0, 1, 0.98]); return fig
